@@ -11,26 +11,23 @@ app.use(cors({
 app.use(express.json());
 
 const LENGTH_MAP = {
-  Short: "80–120 words",
-  Medium: "150–200 words",
-  Long: "220–300 words",
+  Short: "80-120 words",
+  Medium: "150-200 words",
+  Long: "220-300 words",
 };
 
 const VARIATION_TONES = {
-  A: { tone: "Thought Leader", style: "Bold, forward-looking, authoritative. Share a strong opinion or prediction." },
-  B: { tone: "Educational",    style: "Clear, structured, practical. Teach something specific and actionable." },
-  C: { tone: "Provocative",    style: "Challenge assumptions. Start with a contrarian take that sparks debate." },
+  A: { tone: "Thought Leader", style: "Bold, forward-looking, authoritative." },
+  B: { tone: "Educational", style: "Clear, structured, practical." },
+  C: { tone: "Provocative", style: "Challenge assumptions, contrarian take." },
 };
 
 async function callGroq(prompt) {
-  const apiKey = process.env.GROQ_API_KEY;
-  console.log("Using key:", apiKey ? apiKey.slice(0, 8) + "..." : "MISSING");
-
   const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "Authorization": "Bearer " + apiKey,
+      "Authorization": "Bearer " + process.env.GROQ_API_KEY,
     },
     body: JSON.stringify({
       model: "llama-3.3-70b-versatile",
@@ -38,7 +35,43 @@ async function callGroq(prompt) {
       messages: [{ role: "user", content: prompt }],
     }),
   });
-
   const data = await res.json();
-  if (!res.ok) throw new
-cd ~/Downloads/bi-agent\ 2 && git add backend/server.js && git commit -m "Fix CORS for Netlify" && git push origin main
+  if (!res.ok) throw new Error(data.error?.message || JSON.stringify(data));
+  return data.choices[0].message.content.trim();
+}
+
+app.post("/generate", async (req, res) => {
+  const { topic, audience, length } = req.body;
+  if (!topic || !audience || !length) {
+    return res.status(400).json({ error: "Missing fields" });
+  }
+  try {
+    const results = await Promise.all(
+      ["A", "B", "C"].map(async (id) => {
+        const { tone, style } = VARIATION_TONES[id];
+        const prompt = `You are a LinkedIn content strategist for Business Intelligence professionals.
+Write a LinkedIn post:
+- Topic: ${topic}
+- Audience: ${audience}
+- Tone: ${tone} - ${style}
+- Length: ${LENGTH_MAP[length]}
+- Strong hook, short paragraphs, end with engagement question
+- 5 hashtags on last line
+- Output ONLY the post`;
+        const text = await callGroq(prompt);
+        return { id, text };
+      })
+    );
+    const posts = {};
+    results.forEach(({ id, text }) => { posts[id] = text; });
+    res.json({ posts });
+  } catch (err) {
+    console.error("Error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/health", (_, res) => res.json({ status: "ok" }));
+
+const PORT = process.env.PORT || 3001;
+app.listen(PORT, () => console.log(`Backend running on http://localhost:${PORT}`));
