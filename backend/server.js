@@ -5,10 +5,7 @@ import dotenv from "dotenv";
 dotenv.config();
 
 const app = express();
-app.use(cors({
-  origin: ["https://reliable-chimera-58182e.netlify.app", "http://localhost:5175", "http://localhost:5174", "http://localhost:5173"]
-}));
-app.use(express.json());
+app.use(cors());app.use(express.json());
 
 const LENGTH_MAP = {
   Short: "80-120 words",
